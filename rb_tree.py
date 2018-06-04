@@ -44,7 +44,7 @@ class RBNode: # TODO: should each node maintain a depth?
         if depth == 1: # return a new node
             new_slots[0] = value # a new branch always starts on the left
         else:
-            new_slots[0] = create_new_branch(value, depth - 1)
+            new_slots[0] = self.create_new_branch(value, depth - 1)
         return RBNode(new_slots)
 
 
@@ -87,18 +87,20 @@ class RBTree:
         return mod_tree
 
     def is_full(self):
-        return size == 1 << B * depth
+        return self.size == 1 << B * self.depth
 
     def appended(self, value): # TODO: check edge cases
         mod_tree = RBTree()
         mod_tree.size = self.size + 1
         if self.is_full(): # need to create a new root
-            mod_tree.dpeth = self.depth + 1
+            mod_tree.depth = self.depth + 1
             new_slots = [None for i in range(NODE_SIZE)]
             new_slots[0] = self.root
             new_node = RBNode(new_slots)
             new_node.slots[1] = new_node.create_new_branch(value, self.depth)
+            mod_tree.root = new_node
         else:
+            mod_tree.depth = self.depth
             mod_tree.root = self.root.appended(self.size, value, self.depth)
         return mod_tree
 
@@ -135,8 +137,14 @@ def append_test():
     vec = RBTree()
     trees = []
     for i in range(8):
-        trees.append(vec.append(i))
+        trees.append(vec.appended(i))
         vec = trees[i] # create many persistent versions
+    for i in range(8):
+        for j in range(i):
+            assert(trees[i].get(j) == j)
+    print('append test passed!')
+
+# TODO: make a print function to display the tree
 
 def test():
     '''
@@ -145,6 +153,7 @@ def test():
     '''
     index_test()
     update_test()
+    append_test()
 
 if __name__=='__main__':
     test()
