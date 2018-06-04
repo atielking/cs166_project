@@ -11,7 +11,6 @@ NODE_SIZE = 1 << B
 class RBNode: # TODO: should each node maintain a depth?
     def __init__(self, slots):
         self.slots = slots
-        self.next_free_slot = 0 # index of the next free slot
 
     def get(self, index, depth):
         '''
@@ -27,19 +26,44 @@ class RBNode: # TODO: should each node maintain a depth?
             next_idx = ((1 << (B * (depth - 1))) - 1) & index
             return self.slots[slot_idx].get(next_idx, depth - 1)
 
-    def set(self, index, value, depth):
+    def updated(self, index, value, depth):
+        new_slots = list(self.slots)
         if depth == 1:
-            new_node = list(self.slots)
-            new_node[index] = value
-            return RBNode(new_node)
+
+            new_slots[index] = value
         else:
-            new_node = list(self.slots)
             # read only the first B bits of the number
             slot_idx = index >> (B * (depth - 1))
             # chop off the first B bits of the number
             next_idx = ((1 << (B * (depth - 1))) - 1) & index
-            new_node[slot_idx] = self.slots[slot_idx].set(next_idx, value, depth - 1)
-            return RBNode(new_node)
+            new_slots[slot_idx] = self.slots[slot_idx].updated(next_idx, value, depth - 1)
+        return RBNode(new_slots)
+
+    def create_new_branch(self, value, depth):
+        new_slots = [None for i in range(NODE_SIZE)]
+        if depth == 1: # return a new node
+            new_slots[0] = value # a new branch always starts on the left
+        else:
+            new_slots[0] = create_new_branch(value, depth - 1)
+        return RBNode(new_slots)
+
+
+    def appended(self, index, value, depth):
+        # the index is assumed to be the last index of the newly appended vector
+        # assumes we've checked to make sure that the tree is not full
+        new_slots = list(self.slots)
+        if depth == 1:
+            new_slots[index] = value
+        else:
+            # read only the first B bits of the number
+            slot_idx = index >> (B * (depth - 1))
+            # chop off the first B bits of the number
+            next_idx = ((1 << (B * (depth - 1))) - 1) & index
+            if self.slots[slot_idx]:
+                new_slots[slot_idx] = self.slots[slot_idx].appended(next_idx, value, depth - 1)
+            else: # need to create a new branch
+                new_slots[slot_idx] = self.create_new_branch(value, depth - 1)
+        return RBNode(new_slots)
 
 
 
@@ -55,12 +79,29 @@ class RBTree:
     def get(self, index):
         return self.root.get(index, self.depth)
 
-    def set(self, index, value):
+    def updated(self, index, value):
         mod_tree = RBTree()
         mod_tree.size = self.size
-        mod_tree.root = self.root.set(index, value, self.depth)
+        mod_tree.root = self.root.updated(index, value, self.depth)
         mod_tree.depth = self.depth
         return mod_tree
+
+    def is_full(self):
+        return size == 1 << B * depth
+
+    def appended(self, value): # TODO: check edge cases
+        mod_tree = RBTree()
+        mod_tree.size = self.size + 1
+        if self.is_full(): # need to create a new root
+            mod_tree.dpeth = self.depth + 1
+            new_slots = [None for i in range(NODE_SIZE)]
+            new_slots[0] = self.root
+            new_node = RBNode(new_slots)
+            new_node.slots[1] = new_node.create_new_branch(value, self.depth)
+        else:
+            mod_tree.root = self.root.appended(self.size, value, self.depth)
+        return mod_tree
+
     
 
 def index_test():
@@ -74,7 +115,7 @@ def index_test():
     tree.root = root
     for i in range(8):
         assert(i == tree.get(i))
-    print('index_test passed!')
+    print('index test passed!')
 
 def update_test():
     # assumes B = 1
@@ -85,8 +126,17 @@ def update_test():
     tree = RBTree()
     tree.depth = 3
     tree.root = root
-    tree_new = tree.set(5, 166)
-    print(tree_new.get(5))
+    tree_new = tree.updated(5, 166)
+    assert(tree.get(5) == 5)
+    assert(tree_new.get(5) == 166)
+    print('update test passed!')
+
+def append_test():
+    vec = RBTree()
+    trees = []
+    for i in range(8):
+        trees.append(vec.append(i))
+        vec = trees[i] # create many persistent versions
 
 def test():
     '''
